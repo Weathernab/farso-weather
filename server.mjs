@@ -17,6 +17,7 @@ const CACHE_MS = 10 * 60 * 1000;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const FETCH_TIMEOUT_MS = 8000;
 const OBSERVATION_TIMEOUT_MS = 5000;
+const APP_TIMEZONE = "Europe/Ljubljana";
 const ARSO_BEZIGRAD_OBSERVATION =
   "https://meteo.arso.gov.si/uploads/probase/www/observ/surface/text/sl/observationAms_LJUBL-ANA_BEZIGRAD_latest.xml";
 const scoreFile = join(root, ".farso-cache", "model-scores.json");
@@ -314,7 +315,7 @@ function openMeteoUrl(place, days, endpoint, extra = {}) {
   url.searchParams.set("latitude", place.latitude);
   url.searchParams.set("longitude", place.longitude);
   url.searchParams.set("forecast_days", String(days));
-  url.searchParams.set("timezone", "auto");
+  url.searchParams.set("timezone", place.timezone || APP_TIMEZONE);
   Object.entries(extra).forEach(([key, value]) => url.searchParams.set(key, value));
   url.searchParams.set(
     "hourly",
@@ -1017,15 +1018,15 @@ function hoursBetween(a, b) {
 
 function addHoursToKey(key, hours) {
   const date = dateFromHourKey(key);
-  date.setHours(date.getHours() + hours);
-  return localIsoHour(date);
+  date.setUTCHours(date.getUTCHours() + hours);
+  return isoHourFromUtcParts(date);
 }
 
 function dateFromHourKey(key) {
   const [datePart, timePart] = key.split("T");
   const [year, month, day] = datePart.split("-").map(Number);
   const [hour] = timePart.split(":").map(Number);
-  return new Date(year, month - 1, day, hour);
+  return new Date(Date.UTC(year, month - 1, day, hour));
 }
 
 function symbolToWeatherCode(symbol) {
@@ -1100,7 +1101,7 @@ function parseSevenTimerInit(value) {
 }
 
 function localIsoHour(date) {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:00`;
+  return zonedIsoHour(date, APP_TIMEZONE);
 }
 
 function arsoCloudToWeatherCode(cloud, rain) {
@@ -1166,8 +1167,8 @@ function hourKey(value) {
   if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(text)) {
     const date = new Date(text);
     if (!Number.isNaN(date.getTime())) {
-      date.setMinutes(0, 0, 0);
-      return localIsoHour(date);
+      date.setUTCMinutes(0, 0, 0);
+      return zonedIsoHour(date, APP_TIMEZONE);
     }
   }
 
@@ -1178,14 +1179,29 @@ function hourKey(value) {
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return `${normalized.slice(0, 13)}:00`;
-  date.setMinutes(0, 0, 0);
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:00`;
+  date.setUTCMinutes(0, 0, 0);
+  return zonedIsoHour(date, APP_TIMEZONE);
 }
 
 function currentHourKey() {
-  const date = new Date();
-  date.setMinutes(0, 0, 0);
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:00`;
+  return zonedIsoHour(new Date(), APP_TIMEZONE);
+}
+
+function zonedIsoHour(date, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type) => parts.find((part) => part.type === type)?.value;
+  return `${value("year")}-${value("month")}-${value("day")}T${value("hour")}:00`;
+}
+
+function isoHourFromUtcParts(date) {
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(date.getUTCHours())}:00`;
 }
 
 function roundCoord(value) {
