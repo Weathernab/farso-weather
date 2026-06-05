@@ -136,7 +136,8 @@ function render(data) {
   ui.chipPlace.textContent = shortPlace(place);
   ui.currentHour.textContent = formatHour(current?.time);
   ui.currentDesc.textContent = capitalize(weatherText(current?.code));
-  ui.currentSymbol.className = `sun-orb ${weatherClass(current?.code)}`;
+  ui.currentSymbol.className = "current-icon";
+  ui.currentSymbol.innerHTML = weatherIconMarkup(current, "big");
   ui.avgTemp.textContent = format(avgTemp, 0);
   ui.chipTemp.textContent = `${format(avgTemp, 0)} ${DEG}C`;
   ui.avgTempDetail.textContent = observation?.temp

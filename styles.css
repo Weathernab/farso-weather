@@ -418,6 +418,114 @@ a {
   box-shadow: 0 17px 0 -10px #f4fbff;
 }
 
+.current-icon {
+  display: grid;
+  width: 176px;
+  height: 176px;
+  margin-left: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.meteo-icon.big {
+  width: 132px;
+  height: 108px;
+}
+
+.meteo-icon.big .mi-sun {
+  left: 18px;
+  top: 16px;
+  width: 72px;
+  height: 72px;
+  box-shadow: 0 0 0 14px rgba(255, 208, 93, 0.24);
+}
+
+.meteo-icon.big.clear .mi-sun {
+  left: 30px;
+  top: 18px;
+}
+
+.meteo-icon.big .mi-cloud {
+  left: 34px;
+  top: 55px;
+  width: 78px;
+  height: 30px;
+  border-radius: 30px;
+  background: #f4fbff;
+  box-shadow:
+    -25px 8px 0 -4px #f4fbff,
+    24px 8px 0 -3px #f4fbff,
+    0 -20px 0 -6px #f4fbff;
+}
+
+.meteo-icon.big.rain .mi-sun,
+.meteo-icon.big.snow .mi-sun,
+.meteo-icon.big.storm .mi-sun,
+.meteo-icon.big.cloud:not(.partly) .mi-sun {
+  opacity: 0.55;
+}
+
+.meteo-icon.big .mi-drop {
+  top: 92px;
+  width: 8px;
+  height: 16px;
+}
+
+.meteo-icon.big .mi-drop.d1 {
+  left: 42px;
+}
+
+.meteo-icon.big .mi-drop.d2 {
+  left: 62px;
+}
+
+.meteo-icon.big .mi-drop.d3 {
+  left: 82px;
+}
+
+.meteo-icon.big .mi-snow {
+  top: 86px;
+  font-size: 24px;
+}
+
+.meteo-icon.big .mi-snow.s1 {
+  left: 38px;
+}
+
+.meteo-icon.big .mi-snow.s2 {
+  left: 63px;
+}
+
+.meteo-icon.big .mi-snow.s3 {
+  left: 88px;
+}
+
+.meteo-icon.big .mi-fog {
+  left: 28px;
+  right: 28px;
+  height: 7px;
+}
+
+.meteo-icon.big .mi-fog.f1 {
+  top: 42px;
+}
+
+.meteo-icon.big .mi-fog.f2 {
+  top: 61px;
+}
+
+.meteo-icon.big .mi-fog.f3 {
+  top: 80px;
+}
+
+.meteo-icon.big .mi-bolt {
+  left: 78px;
+  top: 78px;
+  width: 18px;
+  height: 31px;
+}
+
 .facts {
   display: grid;
   gap: 13px;
