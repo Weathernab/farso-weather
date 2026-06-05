@@ -141,7 +141,7 @@ function render(data) {
   ui.avgTemp.textContent = format(avgTemp, 0);
   ui.chipTemp.textContent = `${format(avgTemp, 0)} ${DEG}C`;
   ui.avgTempDetail.textContent = observation?.temp
-    ? `${placeLabel(place)}, Bežigrad ${format(observation.temp, 1)}${DEG}C`
+    ? `${placeLabel(place)}, ${observationLabel(observation)} ${format(observation.temp, 1)}${DEG}C`
     : `${placeLabel(place)}, ${activeSources.length} virov`;
   ui.avgRain.textContent = `${format(rainSum, 1)} mm`;
   ui.avgRainDetail.textContent = `${format(mean(next24.map((hour) => hour.rainChance)), 0)}% verjetnost`;
@@ -259,7 +259,12 @@ function calibrationMarkup(calibration) {
   const learned = calibration.learnedSamples
     ? ` · MAE ${format(calibration.learnedMae, 1)}${DEG}C/${calibration.learnedSamples}x`
     : "";
-  return `<p class="calibration-line">Bežigrad odklon ${signedBias}${DEG}C · utež ${format(calibration.weight, 2)}${learned}</p>`;
+  return `<p class="calibration-line">${calibration.station || "ARSO"} odklon ${signedBias}${DEG}C · utež ${format(calibration.weight, 2)}${learned}</p>`;
+}
+
+function observationLabel(observation) {
+  const distance = Number.isFinite(observation?.distanceKm) ? ` ${format(observation.distanceKm, 0)} km` : "";
+  return `${observation?.station || "ARSO"}${distance}`;
 }
 
 function updateHourScrollButtons() {

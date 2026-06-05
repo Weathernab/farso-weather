@@ -18,6 +18,8 @@ const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const FETCH_TIMEOUT_MS = 8000;
 const OBSERVATION_TIMEOUT_MS = 5000;
 const APP_TIMEZONE = "Europe/Ljubljana";
+const ARSO_AMS_OBSERVATIONS =
+  "https://meteo.arso.gov.si/uploads/probase/www/observ/surface/text/sl/observationAms_si_latest.xml";
 const ARSO_BEZIGRAD_OBSERVATION =
   "https://meteo.arso.gov.si/uploads/probase/www/observ/surface/text/sl/observationAms_LJUBL-ANA_BEZIGRAD_latest.xml";
 const scoreFile = join(root, ".farso-cache", "model-scores.json");
@@ -253,7 +255,7 @@ async function handleForecast(url, response) {
   }
 
   const averaged = averageSources(calibrated, days);
-  rememberPredictions(scoreStore, usable);
+  rememberPredictions(scoreStore, usable, observation);
   await saveScoreStore(scoreStore);
 
   const payload = {
@@ -487,6 +489,20 @@ function fromOpenMeteoBatch(data, model) {
 
 async function fetchObservation(place) {
   if ((place.country || "").toLowerCase() !== "slovenija") return null;
+
+  try {
+    const xml = await fetchText(ARSO_AMS_OBSERVATIONS, {
+      headers: { "user-agent": "PovprecnaVremenskaNapoved/1.0" },
+      attempts: 1,
+      timeoutMs: OBSERVATION_TIMEOUT_MS,
+    });
+    const stations = parseArsoObservations(xml);
+    const nearest = nearestObservationStation(place, stations);
+    if (nearest) return nearest;
+  } catch {
+    // Fall back to the dedicated Ljubljana station below.
+  }
+
   if (!String(place.name || "").toLowerCase().includes("ljubljana")) return null;
 
   const xml = await fetchText(ARSO_BEZIGRAD_OBSERVATION, {
@@ -494,14 +510,30 @@ async function fetchObservation(place) {
     attempts: 1,
     timeoutMs: OBSERVATION_TIMEOUT_MS,
   });
-
-  const observation = parseArsoObservation(xml);
+  const observation = parseArsoObservationBlock(xml, place);
   return Number.isFinite(observation?.temp) ? observation : null;
 }
 
-function parseArsoObservation(xml) {
+function parseArsoObservations(xml) {
+  return [...String(xml).matchAll(/<metData>([\s\S]*?)<\/metData>/g)]
+    .map((match) => parseArsoObservationBlock(match[1]))
+    .filter((station) => Number.isFinite(station.temp) && Number.isFinite(station.latitude) && Number.isFinite(station.longitude));
+}
+
+function parseArsoObservationBlock(xml, place = null) {
+  const station = textBetween(xml, "domain_shortTitle") || textBetween(xml, "domain_longTitle") || "ARSO postaja";
+  const latitude = Number(textBetween(xml, "domain_lat"));
+  const longitude = Number(textBetween(xml, "domain_lon"));
+  const distanceKm = place && Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? distanceKmBetween(place.latitude, place.longitude, latitude, longitude)
+    : Number.NaN;
+
   return {
-    station: textBetween(xml, "domain_shortTitle") || "LJUBLJANA - BEZIGRAD",
+    station,
+    stationId: textBetween(xml, "domain_meteosiId") || station.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+    latitude,
+    longitude,
+    distanceKm,
     valid: textBetween(xml, "valid"),
     time: hourKey(textBetween(xml, "valid")),
     temp: Number(textBetween(xml, "t")),
@@ -511,9 +543,20 @@ function parseArsoObservation(xml) {
   };
 }
 
+function nearestObservationStation(place, stations) {
+  const nearest = stations
+    .map((station) => ({
+      ...station,
+      distanceKm: distanceKmBetween(place.latitude, place.longitude, station.latitude, station.longitude),
+    }))
+    .sort((a, b) => a.distanceKm - b.distanceKm)[0];
+
+  return nearest && nearest.distanceKm <= 80 ? nearest : null;
+}
+
 function calibrateSources(sources, observation, scoreStore) {
   return sources.map((source) => {
-    const learned = learnedSourceStats(scoreStore, source.id);
+    const learned = learnedSourceStats(scoreStore, source.id, observation?.stationId);
 
     if (!observation || !Number.isFinite(observation.temp)) {
       return { ...source, calibration: learned ? { ...learned, weight: learned.weight } : null };
@@ -725,15 +768,17 @@ async function saveScoreStore(store) {
 
 function updateScoresFromObservation(store, observation) {
   if (!observation?.time || !Number.isFinite(observation.temp)) return { updated: 0, time: null };
-  if (store.observed[observation.time]) return { updated: 0, time: observation.time };
+  const observedKey = observationKey(observation);
+  if (store.observed[observedKey]) return { updated: 0, time: observation.time, station: observation.station };
 
-  const predictions = store.predictions[observation.time] || {};
+  const predictions = store.predictions[observedKey] || {};
   let updated = 0;
 
   Object.entries(predictions).forEach(([sourceId, prediction]) => {
     if (!Number.isFinite(prediction.temp)) return;
     const error = Math.abs(prediction.temp - observation.temp);
-    const score = store.scores[sourceId] || { samples: 0, tempMae: error, lastUpdated: null };
+    const scoreKey = sourceScoreKey(sourceId, observation.stationId);
+    const score = store.scores[scoreKey] || { samples: 0, tempMae: error, station: observation.station, stationId: observation.stationId, sourceId, lastUpdated: null };
 
     score.tempMae = score.samples ? score.tempMae * (1 - SCORE_DECAY) + error * SCORE_DECAY : error;
     score.samples += 1;
@@ -743,16 +788,17 @@ function updateScoresFromObservation(store, observation) {
     score.lastObservedTime = observation.time;
     score.lastUpdated = new Date().toISOString();
 
-    store.scores[sourceId] = score;
+    store.scores[scoreKey] = score;
     updated += 1;
   });
 
-  store.observed[observation.time] = { temp: observation.temp, updated, savedAt: new Date().toISOString() };
-  delete store.predictions[observation.time];
-  return { updated, time: observation.time };
+  store.observed[observedKey] = { temp: observation.temp, station: observation.station, updated, savedAt: new Date().toISOString() };
+  delete store.predictions[observedKey];
+  return { updated, time: observation.time, station: observation.station };
 }
 
-function rememberPredictions(store, sources) {
+function rememberPredictions(store, sources, observation) {
+  if (!observation?.stationId) return;
   const start = currentHourKey();
   const end = addHoursToKey(start, MAX_STORED_PREDICTION_HOURS);
 
@@ -761,20 +807,23 @@ function rememberPredictions(store, sources) {
       const time = hourKey(hour.time);
       if (time < start || time > end || !Number.isFinite(hour.temp)) return;
 
-      if (!store.predictions[time]) store.predictions[time] = {};
-      store.predictions[time][source.id] = {
+      const key = predictionKey(observation.stationId, time);
+      if (!store.predictions[key]) store.predictions[key] = {};
+      store.predictions[key][source.id] = {
         temp: hour.temp,
         wind: hour.wind,
         rain: hour.rain,
         condition: conditionForRow(hour),
+        station: observation.station,
+        stationId: observation.stationId,
         savedAt: new Date().toISOString(),
       };
     });
   });
 }
 
-function learnedSourceStats(store, sourceId) {
-  const score = store?.scores?.[sourceId];
+function learnedSourceStats(store, sourceId, stationId) {
+  const score = store?.scores?.[sourceScoreKey(sourceId, stationId)];
   if (!score?.samples || !Number.isFinite(score.tempMae)) return null;
 
   return {
@@ -811,14 +860,37 @@ function pruneScoreStore(store) {
   const cutoff = addHoursToKey(currentHourKey(), -12);
   const maxFuture = addHoursToKey(currentHourKey(), MAX_STORED_PREDICTION_HOURS);
 
-  Object.keys(store.predictions).forEach((time) => {
-    if (time < cutoff || time > maxFuture) delete store.predictions[time];
+  Object.keys(store.predictions).forEach((key) => {
+    const time = key.includes("::") ? key.split("::").at(-1) : key;
+    if (time < cutoff || time > maxFuture) delete store.predictions[key];
   });
 
   const observedKeys = Object.keys(store.observed).sort();
   observedKeys.slice(0, Math.max(0, observedKeys.length - 200)).forEach((time) => delete store.observed[time]);
 
   return store;
+}
+
+function predictionKey(stationId, time) {
+  return `${stationId || "unknown"}::${time}`;
+}
+
+function observationKey(observation) {
+  return predictionKey(observation.stationId, observation.time);
+}
+
+function sourceScoreKey(sourceId, stationId) {
+  return `${stationId || "global"}::${sourceId}`;
+}
+
+function distanceKmBetween(lat1, lon1, lat2, lon2) {
+  const earthKm = 6371;
+  const toRad = (value) => (value * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return earthKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function parseArsoApi(data) {
