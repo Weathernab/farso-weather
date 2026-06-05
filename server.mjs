@@ -28,6 +28,7 @@ const SOURCES = [
     id: "openmeteo_best",
     name: "Open-Meteo",
     note: "samodejno najboljsi lokalni model",
+    openMeteoModel: "best_match",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/forecast", { models: "best_match" }),
   },
   {
@@ -58,30 +59,35 @@ const SOURCES = [
     id: "dwd_icon",
     name: "DWD ICON",
     note: "nemski ICON model prek Open-Meteo",
+    openMeteoModel: "icon_seamless",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/dwd-icon"),
   },
   {
     id: "icon_eu",
     name: "DWD ICON-EU",
     note: "visjelocljiv evropski ICON model",
+    openMeteoModel: "icon_eu",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/forecast", { models: "icon_eu" }),
   },
   {
     id: "meteoswiss_icon",
     name: "MeteoSwiss ICON",
     note: "svicarski visokoresolucijski ICON model",
+    openMeteoModel: "meteoswiss_icon_seamless",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/forecast", { models: "meteoswiss_icon_seamless" }),
   },
   {
     id: "geosphere",
     name: "GeoSphere Austria",
     note: "avstrijski regionalni model, prostorsko blizu Sloveniji",
+    openMeteoModel: "geosphere_seamless",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/forecast", { models: "geosphere_seamless" }),
   },
   {
     id: "italia_meteo",
     name: "ItaliaMeteo ICON-2I",
     note: "italijanski regionalni model ICON-2I",
+    openMeteoModel: "italia_meteo_arpae_icon_2i",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/forecast", { models: "italia_meteo_arpae_icon_2i" }),
   },
   {
@@ -94,42 +100,49 @@ const SOURCES = [
     id: "ecmwf",
     name: "ECMWF IFS",
     note: "evropski globalni model prek Open-Meteo",
+    openMeteoModel: "ecmwf_ifs025",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/ecmwf"),
   },
   {
     id: "ecmwf_aifs",
     name: "ECMWF AIFS",
     note: "AI napovedni model ECMWF za dodatno primerjavo",
+    openMeteoModel: "ecmwf_aifs025_single",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/forecast", { models: "ecmwf_aifs025_single" }),
   },
   {
     id: "ukmo",
     name: "UKMO",
     note: "britanski globalni model Met Office",
+    openMeteoModel: "ukmo_seamless",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/forecast", { models: "ukmo_seamless" }),
   },
   {
     id: "knmi",
     name: "KNMI Harmonie",
     note: "nizozemski regionalni model kot neodvisna kontrola",
+    openMeteoModel: "knmi_seamless",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/forecast", { models: "knmi_seamless" }),
   },
   {
     id: "dmi",
     name: "DMI Harmonie",
     note: "danski regionalni model kot neodvisna kontrola",
+    openMeteoModel: "dmi_seamless",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/forecast", { models: "dmi_seamless" }),
   },
   {
     id: "gfs",
     name: "NOAA GFS",
     note: "ameriski globalni model prek Open-Meteo",
+    openMeteoModel: "gfs_seamless",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/gfs"),
   },
   {
     id: "gem",
     name: "GEM Canada",
     note: "kanadski globalni model za neodvisno primerjavo",
+    openMeteoModel: "gem_seamless",
     fetcher: (place, days) => fetchOpenMeteo(place, days, "/v1/forecast", { models: "gem_seamless" }),
   },
   {
@@ -191,10 +204,16 @@ async function handleForecast(url, response) {
   }
 
   const place = await geocode(query);
+  const openMeteoSources = SOURCES.filter((source) => source.openMeteoModel);
+  const openMeteoBatchPromise = openMeteoSources.length
+    ? fetchOpenMeteoBatch(place, days, openMeteoSources)
+    : Promise.resolve(null);
 
   const results = await mapLimit(SOURCES, 6, async (source) => {
     try {
-      const forecast = await source.fetcher(place, days);
+      const forecast = source.openMeteoModel
+        ? fromOpenMeteoBatch(await openMeteoBatchPromise, source.openMeteoModel)
+        : await source.fetcher(place, days);
       return {
         ...sourceMeta(source),
         ok: true,
@@ -302,6 +321,12 @@ function openMeteoUrl(place, days, endpoint, extra = {}) {
     "temperature_2m,precipitation_probability,precipitation,weather_code,cloud_cover,wind_speed_10m"
   );
   return url;
+}
+
+async function fetchOpenMeteoBatch(place, days, sources) {
+  const models = [...new Set(sources.map((source) => source.openMeteoModel).filter(Boolean))];
+  const url = openMeteoUrl(place, days, "/v1/forecast", { models: models.join(",") });
+  return fetchJson(url);
 }
 
 async function fetchMetNo(place) {
@@ -438,6 +463,22 @@ function fromOpenMeteo(data) {
     wind: numberAt(data.hourly.wind_speed_10m, index),
     cloud: numberAt(data.hourly.cloud_cover, index),
     code: numberAt(data.hourly.weather_code, index),
+  }));
+
+  return { hourly };
+}
+
+function fromOpenMeteoBatch(data, model) {
+  if (!data?.hourly?.time?.length) throw new Error("Open-Meteo batch ne vsebuje urnih podatkov.");
+
+  const hourly = data.hourly.time.map((time, index) => ({
+    time,
+    temp: numberAt(data.hourly[`temperature_2m_${model}`], index),
+    rainChance: numberAt(data.hourly[`precipitation_probability_${model}`], index),
+    rain: numberAt(data.hourly[`precipitation_${model}`], index),
+    wind: numberAt(data.hourly[`wind_speed_10m_${model}`], index),
+    cloud: numberAt(data.hourly[`cloud_cover_${model}`], index),
+    code: numberAt(data.hourly[`weather_code_${model}`], index),
   }));
 
   return { hourly };
