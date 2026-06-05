@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="sl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FARSO vreme</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="gov-tab" href="#">FARSO.GOV.SI</a>
+      <a class="product-tab active" href="#"><span class="nav-icon">☼</span><strong>FARSO</strong> VREME</a>
+      <a class="product-tab" href="#"><span class="nav-icon">◌</span><strong>FARSO</strong> VODE</a>
+      <a class="product-tab" href="#"><span class="nav-icon">♨</span><strong>FARSO</strong> OKOLJE</a>
+      <a class="product-tab" href="#"><span class="nav-icon">≋</span><strong>FARSO</strong> POTRESI</a>
+    </header>
+
+    <aside class="left-nav" aria-label="FARSO vremenski meni">
+      <div class="left-title"><span>☼</span><strong>FARSO VREME</strong></div>
+      <a class="selected" href="#"><span>☼</span>Stanje in napovedi</a>
+      <a href="#"><span>▤</span>Napoved v besedi</a>
+      <a href="#"><span>✻</span>Sneg</a>
+      <a href="#"><span>△</span>Plazovi</a>
+      <h2>AKTUALNO</h2>
+      <a href="#"><span>◉</span>Podcast</a>
+      <h2>POVEZAVE</h2>
+      <a href="#"><span>⚠</span>Opozorila</a>
+      <a href="#"><span>⚓</span>Primorje</a>
+      <a href="#"><span>⌂</span>Vreme v gorah</a>
+      <a href="#"><span>═</span>Smucisca</a>
+      <a href="#"><span>✚</span>Letalstvo</a>
+      <a href="#"><span>⌁</span>Podnebje</a>
+      <a href="#"><span>≋</span>Vode</a>
+      <a href="#"><span>○</span>Zrak</a>
+      <a href="#"><span>◇</span>Susomer</a>
+      <a href="#"><span>☷</span>Biovreme</a>
+      <a href="#"><span>≋</span>Gore, morje in reke</a>
+    </aside>
+
+    <main class="meteo-main">
+      <section class="meteo-canvas">
+        <div class="utility-row">
+          <div class="current-chip">
+            <span class="chip-sun">●</span>
+            <strong id="chip-temp">--</strong>
+            <span id="chip-place">Ljubljana</span>
+          </div>
+
+          <form id="search-form" class="search-panel">
+            <label class="sr-only" for="location-input">Poisci lokacijo</label>
+            <input
+              id="location-input"
+              name="location"
+              type="search"
+              autocomplete="off"
+              placeholder="Poisci lokacijo"
+              value="Ljubljana"
+              required
+            >
+            <label class="sr-only" for="days-select">Dni</label>
+            <select id="days-select" name="days">
+              <option value="3">3 dni</option>
+              <option value="5" selected>5 dni</option>
+              <option value="7">7 dni</option>
+            </select>
+            <label class="toggle">
+              <input id="include-rain" type="checkbox" checked>
+              <span>Padavine</span>
+            </label>
+            <button type="submit" aria-label="Prikazi napoved">⌕</button>
+          </form>
+        </div>
+
+        <section id="daily-cards" class="daily-strip" aria-label="Napoved po dnevih"></section>
+
+        <nav class="mode-tabs" aria-label="Vremenski prikazi">
+          <button class="tab active" type="button">▥ Graf</button>
+          <button class="tab" type="button">⌖ Vreme v sliki</button>
+          <button class="tab" type="button">◉ Kamere</button>
+          <button class="tab" type="button">◌ Padavine</button>
+          <button class="tab" type="button">☁ Oblacnost</button>
+          <button class="tab" type="button">◎ Veter</button>
+          <button class="tab" type="button">♨ Temperatura</button>
+        </nav>
+
+        <section class="status" id="status" role="status" aria-live="polite">
+          FARSO nalaga vremensko napoved.
+        </section>
+
+        <section class="weather-stage">
+          <aside class="current-column">
+            <p class="place-line">⌂ <span id="current-place">Ljubljana</span>, <span id="current-hour">--</span></p>
+            <h1 id="current-desc">--</h1>
+            <div class="big-weather">
+              <strong id="avg-temp">--</strong>
+              <span>°C</span>
+              <div class="sun-orb" id="current-symbol" aria-hidden="true"></div>
+            </div>
+            <dl class="facts">
+              <div><dt>Hitrost vetra</dt><dd id="avg-wind">--</dd></div>
+              <div><dt>Padavine</dt><dd id="avg-rain">--</dd></div>
+              <div><dt>Zanesljivost</dt><dd id="confidence">--</dd></div>
+            </dl>
+            <p class="tiny-detail" id="avg-temp-detail">--</p>
+            <p class="tiny-detail" id="avg-rain-detail">--</p>
+            <p class="tiny-detail" id="avg-wind-detail">--</p>
+            <p class="tiny-detail" id="confidence-detail">--</p>
+          </aside>
+
+          <section class="hourly-panel" aria-labelledby="hourly-title">
+            <div class="hourly-head">
+              <div>
+                <h2 id="hourly-title">Napoved po urah</h2>
+                <span id="chart-range">--</span>
+              </div>
+              <div class="hour-controls" aria-label="Izbira stevila ur">
+                <button type="button" class="hour-button active" data-hours="24">1 ura</button>
+                <button type="button" class="hour-button" data-hours="48">3 ure</button>
+                <button type="button" class="hour-button" data-hours="72">vse</button>
+              </div>
+            </div>
+
+            <div class="hour-grid-wrap">
+              <div class="row-labels" aria-hidden="true">
+                <span>Ura</span>
+                <span>Vreme</span>
+                <span>Temp.</span>
+                <span>Veter</span>
+              </div>
+              <button type="button" class="hour-scroll hour-scroll-left" data-hour-scroll="-1" aria-label="Premakni napoved nazaj">‹</button>
+              <div class="hour-scroll-area" id="hour-scroll-area">
+                <div id="hourly-grid" class="hour-grid"></div>
+              </div>
+              <button type="button" class="hour-scroll hour-scroll-right" data-hour-scroll="1" aria-label="Premakni napoved naprej">›</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="more-data">
+          <button type="button">VEC PODATKOV</button>
+          <span id="model-count">--</span>
+        </section>
+
+        <section class="models-section">
+          <h2>Viri napovedi</h2>
+          <div id="models-list" class="models-list"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
