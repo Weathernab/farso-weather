@@ -158,7 +158,7 @@ function render(data) {
 function renderDailyCards(days) {
   const cards = days.slice(0, 5).map((day, index) => `
     <button class="day-card ${day.date === selectedDate || (!selectedDate && index === 0) ? "active" : ""}" type="button" data-date="${day.date}">
-      <span class="day-icon">${weatherIconMarkup(day.code, "small")}</span>
+      <span class="day-icon">${weatherIconMarkup(day, "small", "daily")}</span>
       <div>
         <strong>${index === 0 ? "Danes" : formatDayName(day.date)}</strong>
         <small>${formatShortDate(day.date)}</small>
@@ -206,7 +206,7 @@ function renderHourly(hourly) {
     return `
       <article class="hour-col" style="--bar:${pct}%">
         <div class="hour-time">${formatHourOnly(hour.time)}</div>
-        <div class="hour-icon">${weatherIconMarkup(hour.code, "hour")}</div>
+        <div class="hour-icon">${weatherIconMarkup(hour, "hour")}</div>
         <div class="hour-temp">${format(hour.temp, 0)} ${DEG}C</div>
         <div class="hour-wind" title="${conditionTitle(hour)}">
           <span>${conditionVoteLabel(hour)}</span>
@@ -285,7 +285,8 @@ function weatherText(code) {
   return WMO[code] || "spremenljivo";
 }
 
-function weatherIconMarkup(code, size = "hour") {
+function weatherIconMarkup(weather, size = "hour", period = "hourly") {
+  const code = typeof weather === "number" ? weather : weather?.code;
   const type = weatherClass(code) || "clear";
   const partly = code === 2;
   const parts = [`<span class="meteo-icon ${size} ${type}${partly ? " partly" : ""}" aria-hidden="true">`];
@@ -299,7 +300,9 @@ function weatherIconMarkup(code, size = "hour") {
   }
 
   if (type === "rain" || type === "storm") {
-    parts.push(`<span class="mi-drop d1"></span><span class="mi-drop d2"></span><span class="mi-drop d3"></span>`);
+    rainDropClasses(weather, period).forEach((dropClass) => {
+      parts.push(`<span class="mi-drop ${dropClass}"></span>`);
+    });
   }
 
   if (type === "snow") {
@@ -316,6 +319,37 @@ function weatherIconMarkup(code, size = "hour") {
 
   parts.push(`</span>`);
   return parts.join("");
+}
+
+function rainDropClasses(weather, period) {
+  const count = precipitationIntensity(weather, period);
+  if (count <= 1) return ["d2"];
+  if (count === 2) return ["d1", "d3"];
+  return ["d1", "d2", "d3"];
+}
+
+function precipitationIntensity(weather, period = "hourly") {
+  const code = typeof weather === "number" ? weather : weather?.code;
+  if ([55, 65, 82, 95].includes(code)) return 3;
+  if ([53, 63, 81].includes(code)) return 2;
+
+  const rain = Number(weather?.rain);
+  if (Number.isFinite(rain)) {
+    const strong = period === "daily" ? 8 : 1;
+    const moderate = period === "daily" ? 2 : 0.25;
+    if (rain >= strong) return 3;
+    if (rain >= moderate) return 2;
+    if (rain > 0.05) return 1;
+  }
+
+  const rainChance = Number(weather?.rainChance);
+  if (Number.isFinite(rainChance)) {
+    if (rainChance >= 85) return 3;
+    if (rainChance >= 55) return 2;
+  }
+
+  if ([51, 61, 80].includes(code)) return 1;
+  return 1;
 }
 
 function weatherClass(code) {
